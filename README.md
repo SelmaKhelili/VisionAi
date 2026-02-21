@@ -192,7 +192,7 @@ Open **http://localhost:8000** and start dropping images.
 
 ## 📄 License
 
-MIT — do whatever you want with it.
+MIT
 
 ---
 

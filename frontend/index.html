@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VisionAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --bg:#0a0a0a;
+      --bg2:#111111;
+      --bg3:#181818;
+      --border:#222222;
+      --border2:#2e2e2e;
+      --text:#f0f0f0;
+      --text2:#888888;
+      --text3:#444444;
+      --accent:#e8ff47;
+      --accent2:#c8e000;
+      --red:#ff4444;
+      --font-display:'Bebas Neue',sans-serif;
+      --font-sans:'DM Sans',sans-serif;
+      --font-mono:'DM Mono',monospace;
+    }
+    html,body,#root{height:100%;width:100%;}
+    body{background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:14px;line-height:1.5;overflow:hidden;}
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    @keyframes shimmer{0%{opacity:0.4;}50%{opacity:1;}100%{opacity:0.4;}}
+    @keyframes imgIn{from{opacity:0;transform:scale(0.97);}to{opacity:1;transform:scale(1);}}
+    ::-webkit-scrollbar{width:3px;height:3px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:#2e2e2e;border-radius:2px;}
+    button,input,textarea{font-family:inherit;}
+    input:focus{outline:none;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const API = "http://localhost:8000";
+
+// ── Spinner ───────────────────────────────────────────────────
+const Spinner = ({size=14,color='var(--accent)'}) => (
+  <div style={{width:size,height:size,border:`2px solid ${color}33`,borderTopColor:color,borderRadius:'50%',animation:'spin 0.6s linear infinite',flexShrink:0}}/>
+);
+
+// ── Tag Pill ──────────────────────────────────────────────────
+const Tag = ({label, onClick, active}) => (
+  <span onClick={onClick} style={{
+    padding:'2px 8px',borderRadius:3,fontSize:11,
+    background: active ? 'var(--accent)' : 'var(--bg3)',
+    color: active ? '#000' : 'var(--text2)',
+    border:`1px solid ${active ? 'var(--accent)' : 'var(--border2)'}`,
+    cursor: onClick ? 'pointer' : 'default',
+    fontFamily:'var(--font-mono)',
+    transition:'all 0.15s',
+    userSelect:'none',
+  }}>
+    {label}
+  </span>
+);
+
+// ── Image Card ────────────────────────────────────────────────
+function ImageCard({ image, onClick, selected }) {
+  const a = image.analysis;
+  return (
+    <div
+      onClick={() => onClick(image)}
+      style={{
+        background:'var(--bg2)',
+        border:`1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+        borderRadius:4,overflow:'hidden',cursor:'pointer',
+        animation:'imgIn 0.3s ease',
+        transition:'border-color 0.15s, transform 0.15s',
+        boxShadow: selected ? '0 0 0 1px var(--accent)' : 'none',
+      }}
+      onMouseEnter={e => { if(!selected) e.currentTarget.style.borderColor='var(--border2)'; e.currentTarget.style.transform='translateY(-2px)'; }}
+      onMouseLeave={e => { if(!selected) e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.transform='translateY(0)'; }}
+    >
+      {/* Image */}
+      <div style={{aspectRatio:'4/3',overflow:'hidden',background:'var(--bg3)',position:'relative'}}>
+        <img src={image.b64_thumb} alt={image.filename}
+          style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/>
+        {/* Mood badge */}
+        {a?.mood && a.mood !== 'unknown' && (
+          <div style={{
+            position:'absolute',top:8,right:8,
+            background:'rgba(0,0,0,0.75)',backdropFilter:'blur(4px)',
+            padding:'2px 7px',borderRadius:2,
+            fontSize:10,color:'var(--accent)',fontFamily:'var(--font-mono)',
+            textTransform:'uppercase',letterSpacing:'0.08em',
+          }}>
+            {a.mood}
+          </div>
+        )}
+        {/* Cluster badge */}
+        <div style={{
+          position:'absolute',top:8,left:8,
+          background:'rgba(0,0,0,0.75)',
+          padding:'2px 7px',borderRadius:2,
+          fontSize:10,color:'var(--text2)',fontFamily:'var(--font-mono)',
+        }}>
+          {(image.cluster !== undefined && !isNaN(image.cluster)) ? `G${image.cluster + 1}` : '·'}
+        </div>
+      </div>
+      {/* Info */}
+      <div style={{padding:'10px 12px'}}>
+        <div style={{fontSize:11,color:'var(--text2)',fontFamily:'var(--font-mono)',
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:5}}>
+          {image.filename}
+        </div>
+        <div style={{fontSize:12,color:'var(--text)',lineHeight:1.5,
+          display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+          {a?.description || 'Analyzing...'}
+        </div>
+        {a?.tags?.length > 0 && (
+          <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
+            {a.tags.slice(0,3).map(t => <Tag key={t} label={t}/>)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Image Detail Panel ────────────────────────────────────────
+function DetailPanel({ image, onClose }) {
+  const a = image.analysis;
+  return (
+    <div style={{
+      position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',backdropFilter:'blur(6px)',
+      zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:24,
+      animation:'fadeIn 0.2s ease',
+    }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        background:'var(--bg2)',border:'1px solid var(--border2)',
+        borderRadius:6,maxWidth:900,width:'100%',maxHeight:'90vh',
+        display:'flex',overflow:'hidden',
+        animation:'fadeUp 0.2s ease',
+        boxShadow:'0 40px 80px rgba(0,0,0,0.8)',
+      }}>
+        {/* Image */}
+        <div style={{flex:'0 0 55%',background:'#000',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <img src={image.b64_thumb} alt={image.filename}
+            style={{maxWidth:'100%',maxHeight:'85vh',objectFit:'contain',display:'block'}}/>
+        </div>
+        {/* Analysis */}
+        <div style={{flex:1,padding:28,overflowY:'auto',display:'flex',flexDirection:'column',gap:20}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div>
+              <div style={{fontFamily:'var(--font-display)',fontSize:28,letterSpacing:'0.02em',lineHeight:1,color:'var(--text)'}}>
+                ANALYSIS
+              </div>
+              <div style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)',marginTop:3}}>
+                {image.filename}
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              background:'none',border:'1px solid var(--border2)',color:'var(--text2)',
+              width:30,height:30,borderRadius:3,cursor:'pointer',fontSize:16,
+              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+            }}>×</button>
+          </div>
+
+          {/* Description */}
+          <div>
+            <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)',letterSpacing:'0.1em',marginBottom:6,textTransform:'uppercase'}}>Description</div>
+            <div style={{fontSize:13,color:'var(--text)',lineHeight:1.7}}>{a?.description}</div>
+          </div>
+
+          {/* Meta row */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            {[
+              {label:'Scene', value: a?.scene_type},
+              {label:'Mood', value: a?.mood},
+              {label:'Time', value: a?.time_of_day},
+              {label:'Cluster', value: `Group ${image.cluster + 1}`},
+            ].map(({label,value}) => value && (
+              <div key={label} style={{background:'var(--bg3)',padding:'10px 12px',borderRadius:4,border:'1px solid var(--border)'}}>
+                <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)',letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:3}}>{label}</div>
+                <div style={{fontSize:13,color:'var(--accent)',fontFamily:'var(--font-mono)',textTransform:'capitalize'}}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tags */}
+          {a?.tags?.length > 0 && (
+            <div>
+              <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)',letterSpacing:'0.1em',marginBottom:8,textTransform:'uppercase'}}>Tags</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                {a.tags.map(t => <Tag key={t} label={t}/>)}
+              </div>
+            </div>
+          )}
+
+          {/* Colors */}
+          {a?.dominant_colors?.length > 0 && (
+            <div>
+              <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)',letterSpacing:'0.1em',marginBottom:8,textTransform:'uppercase'}}>Colors</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {a.dominant_colors.map(c => (
+                  <span key={c} style={{
+                    padding:'3px 10px',borderRadius:3,fontSize:11,
+                    background:'var(--bg3)',border:'1px solid var(--border2)',
+                    color:'var(--text2)',fontFamily:'var(--font-mono)',
+                  }}>{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Upload Zone ───────────────────────────────────────────────
+function UploadZone({ onUploaded, isUploading, uploadProgress }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
+
+  const handleFiles = (files) => {
+    const imgs = [...files].filter(f => f.type.startsWith('image/'));
+    if (imgs.length) onUploaded(imgs);
+  };
+
+  return (
+    <div
+      onDragOver={e=>{e.preventDefault();setDragging(true);}}
+      onDragLeave={()=>setDragging(false)}
+      onDrop={e=>{e.preventDefault();setDragging(false);handleFiles(e.dataTransfer.files);}}
+      onClick={()=>!isUploading&&inputRef.current?.click()}
+      style={{
+        border:`1px dashed ${dragging?'var(--accent)':'var(--border2)'}`,
+        borderRadius:4,padding:'18px',textAlign:'center',
+        cursor:isUploading?'default':'pointer',
+        background:dragging?'rgba(232,255,71,0.04)':'transparent',
+        transition:'all 0.15s',
+      }}
+    >
+      <input ref={inputRef} type="file" multiple accept="image/*" style={{display:'none'}}
+        onChange={e=>handleFiles(e.target.files)}/>
+      {isUploading ? (
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+          <Spinner size={18}/>
+          <div style={{fontSize:11,color:'var(--text2)',fontFamily:'var(--font-mono)'}}>
+            Analyzing {uploadProgress.current}/{uploadProgress.total}...
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div style={{fontSize:22,marginBottom:4,color:'var(--accent)'}}>+</div>
+          <div style={{fontSize:12,color:'var(--text2)'}}>Drop images or click</div>
+          <div style={{fontSize:10,color:'var(--text3)',marginTop:2,fontFamily:'var(--font-mono)'}}>JPG · PNG · WEBP</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Cluster View ──────────────────────────────────────────────
+function ClusterView({ clusters, onImageClick }) {
+  if (!clusters.length) return (
+    <div style={{color:'var(--text3)',fontSize:13,textAlign:'center',padding:40}}>
+      Upload at least 2 images to see clusters
+    </div>
+  );
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:32,padding:'24px 0'}}>
+      {clusters.map(cluster => (
+        <div key={cluster.cluster_id}>
+          <div style={{display:'flex',alignItems:'baseline',gap:12,marginBottom:16}}>
+            <div style={{fontFamily:'var(--font-display)',fontSize:32,color:'var(--accent)',letterSpacing:'0.05em'}}>
+              GROUP {cluster.cluster_id + 1}
+            </div>
+            <div style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>
+              {cluster.label} · {cluster.count} image{cluster.count!==1?'s':''}
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10}}>
+            {cluster.images.map(img => (
+              <ImageCard key={img.image_id} image={img} onClick={onImageClick} selected={false}/>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────
+function App() {
+  const [images, setImages] = useState([]);
+  const [clusters, setClusters] = useState([]);
+  const [view, setView] = useState('grid'); // grid | cluster | search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({current:0,total:0});
+  const searchInputRef = useRef(null);
+
+  const fetchImages = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/images`);
+      const data = await res.json();
+      setImages(data.images);
+    } catch {}
+  }, []);
+
+  const fetchClusters = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/clusters`);
+      const data = await res.json();
+      setClusters(data.clusters);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchImages(); fetchClusters(); }, []);
+
+  const handleUpload = async (files) => {
+    setIsUploading(true);
+    setUploadProgress({ current: 0, total: files.length });
+
+    // Upload in batches of 3 to avoid overwhelming Groq
+    const batchSize = 3;
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      const form = new FormData();
+      batch.forEach(f => form.append('files', f));
+      try {
+        await fetch(`${API}/upload`, { method: 'POST', body: form });
+        setUploadProgress(p => ({ ...p, current: Math.min(p.current + batch.length, p.total) }));
+      } catch {}
+    }
+
+    await fetchImages();
+    await fetchClusters();
+    setIsUploading(false);
+  };
+
+  const handleSearch = async (q) => {
+    if (!q.trim()) { setSearchResults(null); return; }
+    try {
+      const res = await fetch(`${API}/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      });
+      const data = await res.json();
+      setSearchResults(data.results);
+    } catch {}
+  };
+
+  const deleteImage = async (imageId, e) => {
+    e.stopPropagation();
+    await fetch(`${API}/images/${imageId}`, { method: 'DELETE' });
+    await fetchImages();
+    await fetchClusters();
+    if (selectedImage?.image_id === imageId) setSelectedImage(null);
+  };
+
+  const displayImages = view === 'search' && searchResults !== null ? searchResults : images;
+
+  return (
+    <div style={{display:'flex',height:'100vh',background:'var(--bg)',overflow:'hidden'}}>
+
+      {/* ── Sidebar ── */}
+      <div style={{
+        width:220,flexShrink:0,borderRight:'1px solid var(--border)',
+        display:'flex',flexDirection:'column',background:'var(--bg)',
+        padding:'20px 16px',gap:20,
+      }}>
+        {/* Logo */}
+        <div>
+          <div style={{fontFamily:'var(--font-display)',fontSize:28,letterSpacing:'0.05em',color:'var(--text)',lineHeight:1}}>
+            VISION<span style={{color:'var(--accent)'}}>AI</span>
+          </div>
+          <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)',marginTop:2}}>
+            IMAGE INTELLIGENCE
+          </div>
+        </div>
+
+        {/* Upload */}
+        <UploadZone onUploaded={handleUpload} isUploading={isUploading} uploadProgress={uploadProgress}/>
+
+        {/* Nav */}
+        <div style={{display:'flex',flexDirection:'column',gap:2}}>
+          {[
+            {id:'grid', label:'GALLERY', count: images.length},
+            {id:'cluster', label:'CLUSTERS', count: clusters.length},
+            {id:'search', label:'SEARCH', count: null},
+          ].map(item => (
+            <button key={item.id} onClick={()=>setView(item.id)} style={{
+              display:'flex',justifyContent:'space-between',alignItems:'center',
+              padding:'8px 10px',borderRadius:3,border:'none',
+              background: view===item.id ? 'var(--accent)' : 'transparent',
+              color: view===item.id ? '#000' : 'var(--text2)',
+              cursor:'pointer',
+              fontFamily:'var(--font-display)',fontSize:16,letterSpacing:'0.05em',
+              transition:'all 0.15s',
+            }}
+              onMouseEnter={e=>{ if(view!==item.id) e.currentTarget.style.background='var(--bg3)'; }}
+              onMouseLeave={e=>{ if(view!==item.id) e.currentTarget.style.background='transparent'; }}
+            >
+              <span>{item.label}</span>
+              {item.count !== null && (
+                <span style={{
+                  fontSize:11,fontFamily:'var(--font-mono)',
+                  color: view===item.id ? '#000' : 'var(--text3)',
+                  fontWeight:400,
+                }}>{item.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Stats */}
+        {images.length > 0 && (
+          <div style={{marginTop:'auto',borderTop:'1px solid var(--border)',paddingTop:14}}>
+            <div style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--font-mono)',letterSpacing:'0.08em',marginBottom:8}}>STATS</div>
+            {[
+              {label:'Images', value: images.length},
+              {label:'Groups', value: clusters.length},
+              {label:'Scenes', value: [...new Set(images.map(i=>i.analysis?.scene_type).filter(Boolean))].length},
+            ].map(({label,value}) => (
+              <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                <span style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)'}}>{label}</span>
+                <span style={{fontSize:11,color:'var(--accent)',fontFamily:'var(--font-mono)'}}>{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Main area ── */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+
+        {/* Header */}
+        <div style={{
+          padding:'16px 24px',borderBottom:'1px solid var(--border)',
+          display:'flex',alignItems:'center',gap:16,flexShrink:0,background:'var(--bg)',
+        }}>
+          <div style={{fontFamily:'var(--font-display)',fontSize:22,letterSpacing:'0.05em',color:'var(--text)'}}>
+            {view==='grid'?'GALLERY':view==='cluster'?'CLUSTERS':'SEARCH'}
+          </div>
+          <div style={{flex:1}}/>
+          {/* Search bar — always visible */}
+          <div style={{
+            display:'flex',alignItems:'center',gap:8,
+            background:'var(--bg2)',border:'1px solid var(--border2)',
+            borderRadius:3,padding:'6px 12px',width:280,
+            transition:'border-color 0.15s',
+          }}
+            onFocus={e=>e.currentTarget.style.borderColor='var(--accent)'}
+            onBlur={e=>e.currentTarget.style.borderColor='var(--border2)'}
+          >
+            <span style={{color:'var(--text3)',fontSize:12}}>⌕</span>
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={e=>{ setSearchQuery(e.target.value); if(view!=='search') setView('search'); }}
+              onKeyDown={e=>{ if(e.key==='Enter') handleSearch(searchQuery); if(e.key==='Escape'){setSearchQuery('');setSearchResults(null);} }}
+              placeholder="Search images..."
+              style={{
+                flex:1,background:'none',border:'none',color:'var(--text)',
+                fontSize:12,fontFamily:'var(--font-mono)',
+              }}
+            />
+            {searchQuery && (
+              <button onClick={()=>{setSearchQuery('');setSearchResults(null);}} style={{
+                background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:14,padding:0,
+              }}>×</button>
+            )}
+          </div>
+          {searchQuery && (
+            <button onClick={()=>handleSearch(searchQuery)} style={{
+              background:'var(--accent)',border:'none',color:'#000',
+              padding:'6px 14px',borderRadius:3,cursor:'pointer',
+              fontFamily:'var(--font-display)',fontSize:14,letterSpacing:'0.05em',
+            }}>FIND</button>
+          )}
+        </div>
+
+        {/* Content */}
+        <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+
+          {/* Empty state */}
+          {images.length === 0 && !isUploading && (
+            <div style={{
+              height:'100%',display:'flex',flexDirection:'column',
+              alignItems:'center',justifyContent:'center',gap:16,
+              animation:'fadeIn 0.4s ease',
+            }}>
+              <div style={{fontFamily:'var(--font-display)',fontSize:64,color:'var(--border2)',letterSpacing:'0.1em',lineHeight:1}}>
+                DROP<br/>IMAGES
+              </div>
+              <div style={{fontSize:12,color:'var(--text3)',fontFamily:'var(--font-mono)',textAlign:'center',lineHeight:1.8}}>
+                Upload images to analyze them with AI<br/>
+                Descriptions · Tags · Clustering · Search
+              </div>
+            </div>
+          )}
+
+          {/* Gallery grid */}
+          {view === 'grid' && images.length > 0 && (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+              {images.map(img => (
+                <div key={img.image_id} style={{position:'relative'}}>
+                  <ImageCard image={img} onClick={setSelectedImage} selected={selectedImage?.image_id===img.image_id}/>
+                  <button onClick={e=>deleteImage(img.image_id,e)} style={{
+                    position:'absolute',top:6,right:6,
+                    background:'rgba(0,0,0,0.7)',border:'none',
+                    color:'#fff',width:22,height:22,borderRadius:2,
+                    cursor:'pointer',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',
+                    opacity:0,transition:'opacity 0.15s',zIndex:2,
+                  }}
+                    onMouseEnter={e=>{e.currentTarget.style.background='var(--red)';}}
+                    onMouseLeave={e=>{e.currentTarget.style.background='rgba(0,0,0,0.7)';}}
+                    ref={el=>{ if(el){ el.closest('[data-card]')?.addEventListener('mouseenter',()=>el.style.opacity='1'); el.closest('[data-card]')?.addEventListener('mouseleave',()=>el.style.opacity='0'); } }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Cluster view */}
+          {view === 'cluster' && (
+            <ClusterView clusters={clusters} onImageClick={setSelectedImage}/>
+          )}
+
+          {/* Search results */}
+          {view === 'search' && (
+            <div>
+              {searchResults === null ? (
+                <div style={{color:'var(--text3)',fontSize:13,fontFamily:'var(--font-mono)',textAlign:'center',paddingTop:60}}>
+                  Type a query and press FIND or Enter
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div style={{color:'var(--text3)',fontSize:13,fontFamily:'var(--font-mono)',textAlign:'center',paddingTop:60}}>
+                  No images matched "{searchQuery}"
+                </div>
+              ) : (
+                <>
+                  <div style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--font-mono)',marginBottom:16}}>
+                    {searchResults.length} result{searchResults.length!==1?'s':''} for "{searchQuery}"
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+                    {searchResults.map(img => (
+                      <ImageCard key={img.image_id} image={img} onClick={setSelectedImage} selected={selectedImage?.image_id===img.image_id}/>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Detail modal */}
+      {selectedImage && <DetailPanel image={selectedImage} onClose={()=>setSelectedImage(null)}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
